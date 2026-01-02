@@ -1,0 +1,11 @@
+pywebview>=4.0
+pywin32>=306
+psutil>=5.9
+requests>=2.31
+termcolor>=2.3
+rich>=13.5
+cryptography>=41.0
+pyasn1>=0.5
+pyasn1-modules>=0.3
+winsign>=0.2
+pyinstaller>=5.13

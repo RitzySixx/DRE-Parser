@@ -1,0 +1,1269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DREParser - Digital Forensic Analysis</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="glass-container">
+        <div class="title-bar" id="titleBar">
+            <div class="window-title">DREParser - Digital Forensic Analysis</div>
+            <div class="window-controls">
+                <button class="control-btn minimize-btn" onclick="minimizeWindow()">−</button>
+                <button class="control-btn maximize-btn" onclick="maximizeWindow()">□</button>
+                <button class="control-btn close-btn" onclick="closeWindow()">×</button>
+            </div>
+        </div>
+        
+        <div class="control-panel">
+            <div class="scan-controls">
+                <button id="scanBtn" class="scan-button" onclick="startScan()">
+                    <span class="button-text">Start DRE Analysis</span>
+                    <span class="button-loading">Analyzing...</span>
+                </button>
+                <button id="stopBtn" class="stop-button" onclick="stopScan()" disabled>Stop Analysis</button>
+                <button id="clearBtn" class="clear-button" onclick="clearResults()">Clear Results</button>
+                <button id="exportBtn" class="export-button" onclick="exportResults()">Export Results</button>
+            </div>
+            
+            <div class="filter-section">
+                <input type="text" class="search-bar" placeholder="Search files or paths..." id="searchInput" oninput="debouncedFilterEntries()">
+                <div class="toggle-section">
+                    <div class="toggle-container">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="deletedToggle" onchange="filterEntries()" checked>
+                            <span class="slider"></span>
+                        </label>
+                        <span class="toggle-label">Deleted & Executed</span>
+                    </div>
+                    <div class="toggle-container">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="renamedToggle" onchange="filterEntries()" checked>
+                            <span class="slider"></span>
+                        </label>
+                        <span class="toggle-label">Renamed Files</span>
+                    </div>
+                    <div class="toggle-container">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="replacedToggle" onchange="filterEntries()" checked>
+                            <span class="slider"></span>
+                        </label>
+                        <span class="toggle-label">Replaced Files</span>
+                    </div>
+                    <div class="toggle-container">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="recyclebinToggle" onchange="filterEntries()" checked>
+                            <span class="slider"></span>
+                        </label>
+                        <span class="toggle-label">Recycle Bin</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="status-bar">
+            <div class="status-item">
+                <span class="status-label">Status:</span>
+                <span id="statusText" class="status-text">Ready - Click Start DRE Analysis</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Progress:</span>
+                <span id="progressText" class="status-text">0%</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Entries Found:</span>
+                <span id="entriesFound" class="status-text">0</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Scan Time:</span>
+                <span id="scanTime" class="status-text">0 seconds</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Recycle Bin Date:</span>
+                <span id="recycleBinDate" class="status-text">N/A</span>
+            </div>
+        </div>
+        
+        <div class="content-area">
+            <div class="grid-header">
+                <div>File Type</div>
+                <div>Filename</div>
+                <div>Path</div>
+                <div>Timestamp</div>
+                <div>Entry Type</div>
+            </div>
+            
+            <div id="entriesGrid" class="files-grid">
+                <div class="no-results">
+                    No DRE analysis results yet.<br>
+                    Click "Start DRE Analysis" to scan for forensic artifacts.
+                    <div class="click-hint">💡 Left-click any row to copy its path</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="contextMenu" class="context-menu" style="display: none;">
+        <div class="context-menu-item" onclick="showFileInfo()">
+            <span class="context-menu-icon">📋</span> Show File Details
+        </div>
+        <div class="context-menu-item" onclick="copyFilename()">
+            <span class="context-menu-icon">📄</span> Copy Filename
+        </div>
+        <div class="context-menu-item" onclick="copyPath()">
+            <span class="context-menu-icon">📁</span> Copy Full Path
+        </div>
+        <div class="context-menu-item" onclick="copyTimestamp()">
+            <span class="context-menu-icon">⏰</span> Copy Timestamp
+        </div>
+        <div class="context-menu-item" onclick="openFileLocation()">
+            <span class="context-menu-icon">📂</span> Open File Location
+        </div>
+    </div>
+
+    <div id="detailModal" class="detail-modal">
+        <div class="modal-header">
+            <div class="modal-title">File Information</div>
+            <button class="modal-close" onclick="closeDetailModal()">×</button>
+        </div>
+        <div class="modal-content">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value" id="detailFileName">N/A</div>
+                    <div class="stat-label">Filename</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="detailFileType">N/A</div>
+                    <div class="stat-label">File Type</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="detailTimestamp">N/A</div>
+                    <div class="stat-label">Timestamp</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="detailEntryType">N/A</div>
+                    <div class="stat-label">Entry Type</div>
+                </div>
+            </div>
+            
+            <div class="grid-header" style="grid-template-columns: 200px minmax(300px, 1fr);">
+                <div>Property</div>
+                <div>Value</div>
+            </div>
+            
+            <div id="detailEntriesGrid" class="files-grid">
+                <div class="no-results">No detailed information available.</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="detailContextMenu" class="context-menu" style="display: none;">
+        <div class="context-menu-item" onclick="copyDetailFilename()">
+            <span class="context-menu-icon">📄</span> Copy Filename
+        </div>
+        <div class="context-menu-item" onclick="copyDetailPath()">
+            <span class="context-menu-icon">📁</span> Copy Full Path
+        </div>
+        <div class="context-menu-item" onclick="copyDetailTimestamp()">
+            <span class="context-menu-icon">⏰</span> Copy Timestamp
+        </div>
+    </div>
+
+    <script>
+        let allEntries = [];
+        let filteredEntries = [];
+        let isScanning = false;
+        let isDragging = false;
+        let dragOffset = { x: 0, y: 0 };
+        let selectedEntry = null;
+        let contextMenu = null;
+        
+        // Performance optimization variables
+        let searchIndex = null;
+        let cachedFilteredResults = new Map();
+        let isFiltering = false;
+        let lastFilterTime = 0;
+        
+        // File info optimization variables
+        let fileInfoCache = new Map();
+        let detailVisibleStart = 0;
+        let detailVisibleEnd = 100;
+        let detailCachedVisibleRows = new Map();
+        let detailGridContainer = null;
+        
+        // Virtual scrolling variables
+        let visibleStart = 0;
+        let visibleEnd = 100;
+        const ITEMS_PER_PAGE = 80;
+        const RENDER_BUFFER = 15;
+        const ROW_HEIGHT = 49;
+        let gridContainer = null;
+        let cachedVisibleRows = new Map();
+
+        function minimizeWindow() {
+            if (window.pywebview && window.pywebview.api) {
+                pywebview.api.window_minimize();
+            }
+        }
+
+        function maximizeWindow() {
+            if (window.pywebview && window.pywebview.api) {
+                pywebview.api.window_maximize();
+            }
+        }
+
+        function closeWindow() {
+            if (window.pywebview && window.pywebview.api) {
+                pywebview.api.window_close();
+            }
+        }
+
+        const titleBar = document.getElementById('titleBar');
+        titleBar.addEventListener('mousedown', startDrag);
+        document.addEventListener('mousemove', doDrag);
+        document.addEventListener('mouseup', stopDrag);
+
+        function startDrag(e) {
+            isDragging = true;
+            dragOffset.x = e.clientX;
+            dragOffset.y = e.clientY;
+            titleBar.style.cursor = 'grabbing';
+            e.preventDefault();
+        }
+
+        function doDrag(e) {
+            if (!isDragging) return;
+            
+            if (window.pywebview && window.pywebview.api) {
+                const moveX = e.screenX - dragOffset.x;
+                const moveY = e.screenY - dragOffset.y;
+                pywebview.api.window_move(moveX, moveY);
+            }
+        }
+
+        function stopDrag() {
+            isDragging = false;
+            titleBar.style.cursor = 'grab';
+        }
+
+        async function startScan() {
+            if (isScanning) return;
+            
+            isScanning = true;
+            updateUIForScanning(true);
+            updateStatus('Starting DRE analysis...', 0, 0, '0 seconds', 'N/A');
+            
+            try {
+                if (window.pywebview && window.pywebview.api) {
+                    const success = await pywebview.api.start_analysis();
+                    if (!success) {
+                        throw new Error('Failed to start analysis');
+                    }
+                } else {
+                    throw new Error('Python backend not available');
+                }
+            } catch (e) {
+                console.error('Error starting analysis:', e);
+                showError('Failed to start analysis: ' + e.message);
+                updateUIForScanning(false);
+            }
+        }
+
+        async function stopScan() {
+            if (!isScanning) return;
+            
+            try {
+                if (window.pywebview && window.pywebview.api) {
+                    await pywebview.api.stop_analysis();
+                }
+            } catch (e) {
+                console.error('Error stopping analysis:', e);
+            }
+            
+            updateUIForScanning(false);
+        }
+
+        async function clearResults() {
+            try {
+                if (window.pywebview && window.pywebview.api) {
+                    await pywebview.api.clear_results();
+                }
+                clearAllResults();
+                updateStatus('Ready - Click Start DRE Analysis', 0, 0, '0 seconds', 'N/A');
+            } catch (e) {
+                console.error('Error clearing results:', e);
+            }
+        }
+
+        async function exportResults() {
+            if (allEntries.length === 0) {
+                showError('No results to export');
+                return;
+            }
+            
+            try {
+                if (window.pywebview && window.pywebview.api) {
+                    await pywebview.api.export_results();
+                }
+            } catch (e) {
+                console.error('Error exporting results:', e);
+                showError('Export failed: ' + e.message);
+            }
+        }
+
+        function clearAllResults() {
+            allEntries = [];
+            const grid = document.getElementById('entriesGrid');
+            grid.innerHTML = '<div class="no-results">No DRE analysis results yet.<br>Click "Start DRE Analysis" to scan for forensic artifacts.<div class="click-hint">💡 Left-click any row to copy its path</div></div>';
+            document.getElementById('entriesFound').textContent = '0';
+        }
+
+        function updateUIForScanning(scanning) {
+            isScanning = scanning;
+            const scanBtn = document.getElementById('scanBtn');
+            const stopBtn = document.getElementById('stopBtn');
+            const clearBtn = document.getElementById('clearBtn');
+            const exportBtn = document.getElementById('exportBtn');
+            
+            scanBtn.disabled = scanning;
+            stopBtn.disabled = !scanning;
+            clearBtn.disabled = scanning;
+            exportBtn.disabled = scanning;
+            
+            const buttonText = scanBtn.querySelector('.button-text');
+            const buttonLoading = scanBtn.querySelector('.button-loading');
+            
+            if (scanning) {
+                buttonText.style.display = 'none';
+                buttonLoading.style.display = 'inline';
+                document.getElementById('statusText').className = 'status-text scanning';
+                scanBtn.classList.add('scanning-glow');
+            } else {
+                buttonText.style.display = 'inline';
+                buttonLoading.style.display = 'none';
+                document.getElementById('statusText').className = 'status-text';
+                scanBtn.classList.remove('scanning-glow');
+            }
+        }
+
+        function updateStatus(status, progress, entries, scanTime, recycleBinDate) {
+            document.getElementById('statusText').textContent = status;
+            document.getElementById('progressText').textContent = progress + '%';
+            document.getElementById('entriesFound').textContent = entries;
+            document.getElementById('scanTime').textContent = scanTime;
+            document.getElementById('recycleBinDate').textContent = recycleBinDate;
+        }
+
+        function showError(message) {
+            document.getElementById('statusText').textContent = 'Error: ' + message;
+            document.getElementById('statusText').className = 'status-text error';
+        }
+
+        function loadAllEntries(results) {
+            console.time('dataProcessing');
+            
+            // Parse the results from backend
+            allEntries = [];
+            
+            if (results.deletedFiles && results.deletedFiles.length > 0) {
+                results.deletedFiles.forEach(item => {
+                    // Format: "filename|path|timestamp"
+                    const parts = item.split('|');
+                    if (parts.length >= 2) {
+                        const filename = parts[0];
+                        const path = parts[1] || '';
+                        const timestamp = parts[2] || 'N/A';
+                        
+                        allEntries.push({
+                            type: 'Deleted & Executed',
+                            filename: filename,
+                            path: path,
+                            timestamp: timestamp,
+                            entryType: 'DELETED_EXECUTED',
+                            fullInfo: item,
+                            extension: getFileExtension(filename),
+                            category: 'deleted'
+                        });
+                    }
+                });
+            }
+            
+            if (results.renamedFiles && results.renamedFiles.length > 0) {
+                results.renamedFiles.forEach(item => {
+                    const parts = item.split(':::');
+                    if (parts.length === 3) {
+                        const [oldName, newName, timestamp] = parts;
+                        allEntries.push({
+                            type: 'Renamed File',
+                            filename: `${oldName} → ${newName}`,
+                            path: '', // Path not available for renamed files
+                            timestamp: timestamp,
+                            entryType: 'RENAMED',
+                            fullInfo: item,
+                            isRename: true,
+                            oldName: oldName,
+                            newName: newName,
+                            extension: getFileExtension(newName) || getFileExtension(oldName),
+                            category: 'renamed'
+                        });
+                    }
+                });
+            }
+            
+            if (results.replacedFiles && results.replacedFiles.length > 0) {
+                results.replacedFiles.forEach(item => {
+                    const [filename, timestamp] = item.split(':::');
+                    allEntries.push({
+                        type: 'Replaced File',
+                        filename: filename,
+                        path: '', // Path not available for replaced files
+                        timestamp: timestamp,
+                        entryType: 'REPLACED',
+                        fullInfo: item,
+                        extension: getFileExtension(filename),
+                        category: 'replaced'
+                    });
+                });
+            }
+            
+            if (results.recycleBinFiles && results.recycleBinFiles.length > 0) {
+                results.recycleBinFiles.forEach(item => {
+                    // Format: "filename | timestamp"
+                    const parts = item.split(' | ');
+                    if (parts.length === 2) {
+                        const [filename, timestamp] = parts;
+                        allEntries.push({
+                            type: 'Recycle Bin',
+                            filename: filename,
+                            path: 'C:\\$Recycle.Bin\\',
+                            timestamp: timestamp,
+                            entryType: 'RECYCLE_BIN',
+                            fullInfo: item,
+                            extension: getFileExtension(filename),
+                            category: 'recyclebin'
+                        });
+                    }
+                });
+            }
+            
+            if (results.journalRecycleBin && results.journalRecycleBin.length > 0) {
+                results.journalRecycleBin.forEach(item => {
+                    const [filename, timestamp] = item.split(':::');
+                    allEntries.push({
+                        type: 'Recycle Bin (Journal)',
+                        filename: filename,
+                        path: 'C:\\$Recycle.Bin\\',
+                        timestamp: timestamp,
+                        entryType: 'RECYCLE_BIN_JOURNAL',
+                        fullInfo: item,
+                        extension: getFileExtension(filename),
+                        category: 'journalrecyclebin'
+                    });
+                });
+            }
+            
+            // Build search index for instant search
+            buildSearchIndex();
+            
+            // Initialize virtual scrolling
+            initializeVirtualScrolling();
+            
+            // Initial filter with all entries
+            filterEntries();
+            
+            console.timeEnd('dataProcessing');
+            console.log(`Loaded ${allEntries.length} entries`);
+            
+            // Update status
+            updateStatus('Analysis Complete', 100, allEntries.length, 
+                        results.scanTime || '0 seconds', 
+                        results.recycleBinDate || 'N/A');
+        }
+        
+        function getFileExtension(filename) {
+            const parts = filename.split('.');
+            return parts.length > 1 ? '.' + parts[parts.length - 1].toLowerCase() : '';
+        }
+        
+        function buildSearchIndex() {
+            console.time('buildIndex');
+            searchIndex = {
+                filenames: new Array(allEntries.length),
+                types: new Array(allEntries.length),
+                entryTypes: new Array(allEntries.length),
+                timestamps: new Array(allEntries.length),
+                extensions: new Array(allEntries.length),
+                paths: new Array(allEntries.length),
+                categories: new Array(allEntries.length),
+                // Add optimized lookup maps
+                nameMap: new Map(),
+                typeMap: new Map(),
+                entryTypeMap: new Map(),
+                categoryMap: new Map()
+            };
+            
+            for (let i = 0; i < allEntries.length; i++) {
+                const entry = allEntries[i];
+                const filename = (entry.filename || '').toLowerCase();
+                const type = (entry.type || '').toLowerCase();
+                const entryType = (entry.entryType || '').toLowerCase();
+                const extension = (entry.extension || '').toLowerCase();
+                const path = (entry.path || '').toLowerCase();
+                const category = (entry.category || '').toLowerCase();
+                
+                searchIndex.filenames[i] = filename;
+                searchIndex.types[i] = type;
+                searchIndex.entryTypes[i] = entryType;
+                searchIndex.timestamps[i] = entry.timestamp || '';
+                searchIndex.extensions[i] = extension;
+                searchIndex.paths[i] = path;
+                searchIndex.categories[i] = category;
+                
+                // Build lookup maps for instant filtering
+                if (filename) {
+                    if (!searchIndex.nameMap.has(filename)) {
+                        searchIndex.nameMap.set(filename, []);
+                    }
+                    searchIndex.nameMap.get(filename).push(i);
+                }
+                
+                if (type) {
+                    if (!searchIndex.typeMap.has(type)) {
+                        searchIndex.typeMap.set(type, []);
+                    }
+                    searchIndex.typeMap.get(type).push(i);
+                }
+                
+                if (entryType) {
+                    if (!searchIndex.entryTypeMap.has(entryType)) {
+                        searchIndex.entryTypeMap.set(entryType, []);
+                    }
+                    searchIndex.entryTypeMap.get(entryType).push(i);
+                }
+                
+                if (category) {
+                    if (!searchIndex.categoryMap.has(category)) {
+                        searchIndex.categoryMap.set(category, []);
+                    }
+                    searchIndex.categoryMap.get(category).push(i);
+                }
+            }
+            
+            console.timeEnd('buildIndex');
+        }
+        
+        function initializeVirtualScrolling() {
+            gridContainer = document.getElementById('entriesGrid');
+            if (gridContainer) {
+                let scrollTimeout;
+                const debouncedScrollHandler = () => {
+                    if (scrollTimeout) cancelAnimationFrame(scrollTimeout);
+                    scrollTimeout = requestAnimationFrame(handleVirtualScroll);
+                };
+                
+                gridContainer.addEventListener('scroll', debouncedScrollHandler, { passive: true });
+                
+                setTimeout(() => handleVirtualScroll(), 50);
+            }
+        }
+        
+        function handleVirtualScroll() {
+            if (!gridContainer || !filteredEntries.length) return;
+            
+            const scrollTop = gridContainer.scrollTop;
+            const scrollLeft = gridContainer.scrollLeft;
+            const containerHeight = gridContainer.clientHeight;
+            
+            const startIndex = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - RENDER_BUFFER);
+            const endIndex = Math.min(filteredEntries.length, Math.ceil((scrollTop + containerHeight) / ROW_HEIGHT) + RENDER_BUFFER);
+            
+            if (startIndex !== visibleStart || endIndex !== visibleEnd) {
+                visibleStart = startIndex;
+                visibleEnd = endIndex;
+                renderVisibleRows();
+                
+                const buffer = gridContainer.querySelector('.virtual-scroll-buffer');
+                if (buffer) {
+                    buffer.style.transform = `translateY(${visibleStart * ROW_HEIGHT}px) translateX(${-scrollLeft}px)`;
+                }
+            } else {
+                const buffer = gridContainer.querySelector('.virtual-scroll-buffer');
+                if (buffer) {
+                    buffer.style.transform = `translateY(${visibleStart * ROW_HEIGHT}px) translateX(${-scrollLeft}px)`;
+                }
+            }
+        }
+        
+        function renderVisibleRows() {
+            const startTime = performance.now();
+            
+            const keepCache = new Map();
+            for (let i = Math.max(0, visibleStart - RENDER_BUFFER * 2); i < Math.min(filteredEntries.length, visibleEnd + RENDER_BUFFER * 2); i++) {
+                const cacheKey = i.toString();
+                if (cachedVisibleRows.has(cacheKey)) {
+                    keepCache.set(cacheKey, cachedVisibleRows.get(cacheKey));
+                }
+            }
+            cachedVisibleRows.clear();
+            cachedVisibleRows = keepCache;
+            
+            const fragment = document.createDocumentFragment();
+            const visibleEntries = filteredEntries.slice(visibleStart, visibleEnd);
+            
+            for (let i = 0; i < visibleEntries.length; i++) {
+                const actualIndex = visibleStart + i;
+                const cacheKey = actualIndex.toString();
+                
+                if (!cachedVisibleRows.has(cacheKey)) {
+                    const entry = visibleEntries[i];
+                    if (entry) {
+                        const row = createOptimizedGridRow(entry, actualIndex);
+                        cachedVisibleRows.set(cacheKey, row);
+                    }
+                }
+                
+                const row = cachedVisibleRows.get(cacheKey);
+                if (row) {
+                    fragment.appendChild(row);
+                }
+            }
+            
+            const totalHeight = filteredEntries.length * ROW_HEIGHT;
+            const offsetY = visibleStart * ROW_HEIGHT;
+            const scrollLeft = gridContainer.scrollLeft;
+            
+            const existingBuffer = gridContainer.querySelector('.virtual-scroll-buffer');
+            if (existingBuffer) {
+                existingBuffer.innerHTML = '';
+                existingBuffer.style.height = totalHeight + 'px';
+                existingBuffer.style.transform = `translateY(${offsetY}px) translateX(${-scrollLeft}px)`;
+                existingBuffer.appendChild(fragment);
+            } else {
+                const buffer = document.createElement('div');
+                buffer.className = 'virtual-scroll-buffer';
+                buffer.style.height = totalHeight + 'px';
+                buffer.style.position = 'relative';
+                buffer.style.transform = `translateY(${offsetY}px) translateX(${-scrollLeft}px)`;
+                buffer.appendChild(fragment);
+                gridContainer.innerHTML = '';
+                gridContainer.appendChild(buffer);
+            }
+            
+            const renderTime = performance.now() - startTime;
+            if (renderTime > 16) {
+                console.log(`Virtual scroll render took ${renderTime.toFixed(2)}ms for ${visibleEntries.length} rows`);
+            }
+        }
+        
+        function createOptimizedGridRow(entry, index) {
+            const row = document.createElement('div');
+            row.className = 'grid-row';
+            row.dataset.entryIndex = index;
+            row.dataset.entry = JSON.stringify(entry);
+            
+            const entryClass = getEntryClass(entry.entryType);
+            const entryTypeText = formatEntryType(entry.entryType);
+            
+            let displayFilename = entry.filename;
+            if (entry.extension) {
+                displayFilename = entry.filename + `<span class="extension-badge">${entry.extension}</span>`;
+            }
+            
+            // Truncate long paths for display
+            const displayPath = entry.path.length > 60 ? entry.path.substring(0, 60) + '...' : entry.path;
+            
+            row.innerHTML = `
+                <div class="file-type">
+                    <span class="type-badge ${getTypeBadgeClass(entry.entryType)}">${entry.type}</span>
+                </div>
+                <div class="filename" title="${entry.filename}">${displayFilename}</div>
+                <div class="filepath" title="${entry.path}">${displayPath}</div>
+                <div class="timestamp" title="${entry.timestamp}">${formatDate(entry.timestamp)}</div>
+                <div class="${entryClass}" title="${entryTypeText}">${entryTypeText}</div>
+            `;
+            
+            // LEFT CLICK: Copy path to clipboard with visual feedback
+            row.addEventListener('click', (e) => {
+                e.stopPropagation();
+                
+                let textToCopy = '';
+                if (entry.path && entry.path.trim() !== '') {
+                    textToCopy = entry.path;
+                } else {
+                    textToCopy = entry.filename;
+                }
+                
+                copyToClipboard(textToCopy);
+                
+                // Visual feedback
+                row.classList.add('path-copied');
+                setTimeout(() => {
+                    row.classList.remove('path-copied');
+                }, 500);
+            });
+            
+            // RIGHT CLICK: Show context menu
+            row.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                showContextMenu(e, entry);
+            });
+            
+            return row;
+        }
+        
+        function getEntryClass(entryType) {
+            const classMap = {
+                'DELETED_EXECUTED': 'reason-deleted',
+                'RENAMED': 'reason-renamed',
+                'REPLACED': 'reason-replaced',
+                'RECYCLE_BIN': 'reason-recyclebin',
+                'RECYCLE_BIN_JOURNAL': 'reason-recyclebin'
+            };
+            return classMap[entryType] || 'entry-type';
+        }
+        
+        function getTypeBadgeClass(entryType) {
+            const classMap = {
+                'DELETED_EXECUTED': 'type-deleted',
+                'RENAMED': 'type-renamed',
+                'REPLACED': 'type-replaced',
+                'RECYCLE_BIN': 'type-recyclebin',
+                'RECYCLE_BIN_JOURNAL': 'type-recyclebin'
+            };
+            return classMap[entryType] || '';
+        }
+        
+        function formatEntryType(entryType) {
+            const typeMap = {
+                'DELETED_EXECUTED': 'Deleted & Executed',
+                'RENAMED': 'Renamed',
+                'REPLACED': 'Replaced',
+                'RECYCLE_BIN': 'Recycle Bin',
+                'RECYCLE_BIN_JOURNAL': 'Recycle Bin (Journal)'
+            };
+            return typeMap[entryType] || entryType;
+        }
+        
+        function formatDate(timestamp) {
+            if (!timestamp || timestamp === 'N/A') return 'N/A';
+            try {
+                // Try to parse the timestamp
+                if (timestamp.includes('/')) {
+                    // Already formatted date
+                    return timestamp;
+                }
+                return timestamp;
+            } catch (e) {
+                return timestamp;
+            }
+        }
+        
+        function filterEntries() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase().trim();
+            
+            const filters = {
+                deleted: document.getElementById('deletedToggle').checked,
+                renamed: document.getElementById('renamedToggle').checked,
+                replaced: document.getElementById('replacedToggle').checked,
+                recyclebin: document.getElementById('recyclebinToggle').checked
+            };
+            
+            const anyFilterActive = Object.values(filters).some(v => v);
+            const cacheKey = `${searchTerm}|${JSON.stringify(filters)}`;
+            
+            if (cachedFilteredResults.has(cacheKey)) {
+                filteredEntries = cachedFilteredResults.get(cacheKey);
+                updateEntriesDisplay();
+                return;
+            }
+            
+            if (allEntries.length > 100) {
+                filterEntriesOptimized(searchTerm, filters, anyFilterActive, cacheKey);
+            } else {
+                filterEntriesSync(searchTerm, filters, anyFilterActive, cacheKey);
+            }
+        }
+        
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+        
+        const debouncedFilterEntries = debounce(filterEntries, 5);
+        
+        function filterEntriesOptimized(searchTerm, filters, anyFilterActive, cacheKey) {
+            console.time('optimizedFilter');
+            const startTime = performance.now();
+            isFiltering = true;
+            
+            let candidateIndices = new Set();
+            
+            if (searchTerm) {
+                const searchLower = searchTerm.toLowerCase();
+                
+                if (searchIndex.nameMap.has(searchLower)) {
+                    searchIndex.nameMap.get(searchLower).forEach(i => candidateIndices.add(i));
+                }
+                
+                if (searchTerm.length >= 2) {
+                    for (let i = 0; i < allEntries.length && candidateIndices.size < 1000; i++) {
+                        if (candidateIndices.has(i)) continue;
+                        
+                        const filename = searchIndex.filenames[i];
+                        const type = searchIndex.types[i];
+                        const entryType = searchIndex.entryTypes[i];
+                        const extension = searchIndex.extensions[i];
+                        const path = searchIndex.paths[i];
+                        
+                        if (filename.includes(searchLower) || 
+                            type.includes(searchLower) || 
+                            entryType.includes(searchLower) ||
+                            extension.includes(searchLower) ||
+                            path.includes(searchLower)) {
+                            candidateIndices.add(i);
+                        }
+                    }
+                }
+                
+                if (candidateIndices.size === 0) {
+                    filteredEntries = [];
+                    isFiltering = false;
+                    cachedFilteredResults.set(cacheKey, filteredEntries);
+                    updateEntriesDisplay();
+                    console.timeEnd('optimizedFilter');
+                    console.log(`No matches found for "${searchTerm}" in ${(performance.now() - startTime).toFixed(2)}ms`);
+                    return;
+                }
+            } else {
+                for (let i = 0; i < allEntries.length; i++) {
+                    candidateIndices.add(i);
+                }
+            }
+            
+            if (anyFilterActive) {
+                const filteredCandidates = new Set();
+                
+                for (const index of candidateIndices) {
+                    const category = searchIndex.categories[index];
+                    let categoryMatch = false;
+                    
+                    if ((filters.deleted && category === 'deleted') ||
+                        (filters.renamed && category === 'renamed') ||
+                        (filters.replaced && category === 'replaced') ||
+                        (filters.recyclebin && (category === 'recyclebin' || category === 'journalrecyclebin'))) {
+                        categoryMatch = true;
+                    }
+                    
+                    if (categoryMatch) {
+                        filteredCandidates.add(index);
+                    }
+                }
+                
+                candidateIndices = filteredCandidates;
+            }
+            
+            filteredEntries = Array.from(candidateIndices).map(i => allEntries[i]);
+            isFiltering = false;
+            lastFilterTime = Date.now();
+            cachedFilteredResults.set(cacheKey, filteredEntries);
+            
+            console.timeEnd('optimizedFilter');
+            console.log(`Filtered ${allEntries.length} entries to ${filteredEntries.length} in ${(performance.now() - startTime).toFixed(2)}ms`);
+            updateEntriesDisplay();
+        }
+        
+        function filterEntriesSync(searchTerm, filters, anyFilterActive, cacheKey) {
+            const startTime = performance.now();
+            const filteredResults = [];
+            
+            for (let i = 0; i < allEntries.length; i++) {
+                if (searchTerm) {
+                    const filename = searchIndex.filenames[i];
+                    const type = searchIndex.types[i];
+                    const entryType = searchIndex.entryTypes[i];
+                    const extension = searchIndex.extensions[i];
+                    const path = searchIndex.paths[i];
+                    
+                    if (!filename.includes(searchTerm) && 
+                        !type.includes(searchTerm) && 
+                        !entryType.includes(searchTerm) &&
+                        !extension.includes(searchTerm) &&
+                        !path.includes(searchTerm)) {
+                        continue;
+                    }
+                }
+                
+                if (anyFilterActive) {
+                    const category = searchIndex.categories[i];
+                    let categoryMatch = false;
+                    
+                    if ((filters.deleted && category === 'deleted') ||
+                        (filters.renamed && category === 'renamed') ||
+                        (filters.replaced && category === 'replaced') ||
+                        (filters.recyclebin && (category === 'recyclebin' || category === 'journalrecyclebin'))) {
+                        categoryMatch = true;
+                    }
+                    
+                    if (!categoryMatch) continue;
+                }
+                
+                filteredResults.push(allEntries[i]);
+            }
+            
+            filteredEntries = filteredResults;
+            lastFilterTime = Date.now();
+            cachedFilteredResults.set(cacheKey, filteredResults);
+            
+            console.log(`Filtered ${allEntries.length} entries to ${filteredEntries.length} in ${(performance.now() - startTime).toFixed(2)}ms`);
+            updateEntriesDisplay();
+        }
+        
+        function updateEntriesDisplay() {
+            const grid = document.getElementById('entriesGrid');
+            
+            if (filteredEntries.length === 0) {
+                grid.innerHTML = '<div class="no-results">No entries found matching current filters.<div class="click-hint">💡 Left-click any row to copy its path</div></div>';
+                document.getElementById('entriesFound').textContent = '0';
+                return;
+            }
+            
+            document.getElementById('entriesFound').textContent = filteredEntries.length;
+            
+            const scrollTop = grid.scrollTop;
+            const scrollLeft = grid.scrollLeft;
+            
+            cachedVisibleRows.clear();
+            visibleStart = 0;
+            visibleEnd = 0;
+            
+            handleVirtualScroll();
+            
+            setTimeout(() => {
+                grid.scrollTop = scrollTop;
+                grid.scrollLeft = scrollLeft;
+            }, 50);
+        }
+        
+        function showContextMenu(e, entry) {
+            selectedEntry = entry;
+            contextMenu = document.getElementById('contextMenu');
+            contextMenu.style.display = 'block';
+            
+            // Position at cursor
+            const x = e.clientX;
+            const y = e.clientY;
+            
+            // Ensure menu stays within window bounds
+            const menuWidth = 220;
+            const menuHeight = 200;
+            const windowWidth = window.innerWidth;
+            const windowHeight = window.innerHeight;
+            
+            let left = x;
+            let top = y;
+            
+            if (x + menuWidth > windowWidth) {
+                left = windowWidth - menuWidth - 10;
+            }
+            
+            if (y + menuHeight > windowHeight) {
+                top = windowHeight - menuHeight - 10;
+            }
+            
+            contextMenu.style.left = left + 'px';
+            contextMenu.style.top = top + 'px';
+            
+            // Hide context menu when clicking elsewhere
+            const hideMenu = () => {
+                if (contextMenu) {
+                    contextMenu.style.display = 'none';
+                }
+                document.removeEventListener('click', hideMenu);
+            };
+            
+            setTimeout(() => {
+                document.addEventListener('click', hideMenu);
+            }, 100);
+        }
+        
+        function hideContextMenu() {
+            if (contextMenu) {
+                contextMenu.style.display = 'none';
+            }
+            document.removeEventListener('click', hideContextMenu);
+        }
+        
+        function showFileInfo(entry = null) {
+            if (!entry && !selectedEntry) return;
+            const displayEntry = entry || selectedEntry;
+            
+            const modal = document.getElementById('detailModal');
+            const detailGrid = document.getElementById('detailEntriesGrid');
+            detailGridContainer = detailGrid;
+            
+            document.getElementById('detailFileName').textContent = displayEntry.filename;
+            document.getElementById('detailFileType').textContent = displayEntry.type;
+            document.getElementById('detailTimestamp').textContent = displayEntry.timestamp;
+            document.getElementById('detailEntryType').textContent = formatEntryType(displayEntry.entryType);
+            
+            const detailEntries = [];
+            
+            // Add basic info
+            detailEntries.push({
+                property: 'Filename',
+                value: displayEntry.filename
+            });
+            
+            detailEntries.push({
+                property: 'File Type',
+                value: displayEntry.type
+            });
+            
+            detailEntries.push({
+                property: 'Timestamp',
+                value: displayEntry.timestamp
+            });
+            
+            detailEntries.push({
+                property: 'Entry Type',
+                value: formatEntryType(displayEntry.entryType)
+            });
+            
+            detailEntries.push({
+                property: 'File Extension',
+                value: displayEntry.extension || 'None'
+            });
+            
+            // Add path if available
+            if (displayEntry.path && displayEntry.path.trim() !== '') {
+                detailEntries.push({
+                    property: 'Path',
+                    value: displayEntry.path
+                });
+            }
+            
+            // Add rename info if applicable
+            if (displayEntry.isRename && displayEntry.oldName && displayEntry.newName) {
+                detailEntries.push({
+                    property: 'Old Name',
+                    value: displayEntry.oldName
+                });
+                
+                detailEntries.push({
+                    property: 'New Name',
+                    value: displayEntry.newName
+                });
+            }
+            
+            // Add full info
+            if (displayEntry.fullInfo) {
+                detailEntries.push({
+                    property: 'Raw Data',
+                    value: displayEntry.fullInfo
+                });
+            }
+            
+            // Initialize detail virtual scrolling
+            initializeDetailVirtualScrolling();
+            
+            if (detailEntries.length === 0) {
+                detailGrid.innerHTML = '<div class="no-results">No detailed information available.</div>';
+            } else {
+                detailCachedVisibleRows.clear();
+                detailVisibleStart = 0;
+                detailVisibleEnd = 0;
+                
+                detailGrid.innerHTML = '<div id="detailVirtualBuffer" class="detail-virtual-scroll-buffer"></div>';
+                
+                setTimeout(() => {
+                    renderDetailEntries(detailEntries);
+                    handleDetailVirtualScroll();
+                }, 50);
+            }
+            
+            modal.style.display = 'flex';
+            hideContextMenu();
+        }
+        
+        function renderDetailEntries(entries) {
+            const fragment = document.createDocumentFragment();
+            
+            for (let i = 0; i < entries.length; i++) {
+                const row = document.createElement('div');
+                row.className = 'grid-row';
+                row.style.gridTemplateColumns = '200px minmax(300px, 1fr)';
+                row.style.cursor = 'default';
+                
+                row.innerHTML = `
+                    <div style="font-weight: 600; color: rgba(255, 255, 255, 0.9);">${entries[i].property}:</div>
+                    <div style="color: rgba(255, 255, 255, 0.8); word-break: break-all;">${entries[i].value}</div>
+                `;
+                
+                fragment.appendChild(row);
+            }
+            
+            const buffer = document.querySelector('#detailVirtualBuffer');
+            if (buffer) {
+                buffer.innerHTML = '';
+                buffer.appendChild(fragment);
+            }
+        }
+        
+        function closeDetailModal() {
+            const modal = document.getElementById('detailModal');
+            modal.style.display = 'none';
+            
+            if (detailContextMenu) {
+                detailContextMenu.style.display = 'none';
+            }
+            
+            selectedDetailEntry = null;
+        }
+        
+        function copyFilename() {
+            if (selectedEntry) {
+                copyToClipboard(selectedEntry.filename);
+            }
+            hideContextMenu();
+        }
+        
+        function copyPath() {
+            if (selectedEntry) {
+                const fullPath = selectedEntry.path ? selectedEntry.path : selectedEntry.filename;
+                copyToClipboard(fullPath);
+            }
+            hideContextMenu();
+        }
+        
+        function copyTimestamp() {
+            if (selectedEntry) {
+                copyToClipboard(selectedEntry.timestamp);
+            }
+            hideContextMenu();
+        }
+        
+        function openFileLocation() {
+            if (selectedEntry && selectedEntry.path && selectedEntry.path.trim() !== '') {
+                try {
+                    // Try to open the folder containing the file
+                    const folderPath = selectedEntry.path.includes('\\') 
+                        ? selectedEntry.path.substring(0, selectedEntry.path.lastIndexOf('\\'))
+                        : selectedEntry.path;
+                    
+                    if (folderPath && folderPath.trim() !== '') {
+                        // Use shell to open folder
+                        if (window.pywebview && window.pywebview.api) {
+                            pywebview.api.open_file_location(folderPath);
+                        } else {
+                            // Fallback for development
+                            console.log(`Would open: ${folderPath}`);
+                            showCopyFeedback('Opening file location...');
+                        }
+                    }
+                } catch (e) {
+                    console.error('Error opening file location:', e);
+                    showCopyFeedback('Failed to open location');
+                }
+            } else {
+                showCopyFeedback('No path available');
+            }
+            hideContextMenu();
+        }
+        
+        function copyToClipboard(text) {
+            if (!text || text.trim() === '') {
+                showCopyFeedback('Nothing to copy!');
+                return;
+            }
+            
+            navigator.clipboard.writeText(text).then(() => {
+                showCopyFeedback('✓ Copied to clipboard!');
+            }).catch(err => {
+                console.error('Failed to copy: ', err);
+                showCopyFeedback('✗ Copy failed!');
+            });
+        }
+        
+        function showCopyFeedback(text) {
+            const feedback = document.createElement('div');
+            feedback.className = 'copy-feedback';
+            feedback.textContent = text;
+            document.body.appendChild(feedback);
+            
+            setTimeout(() => {
+                if (feedback.parentNode) {
+                    feedback.parentNode.removeChild(feedback);
+                }
+            }, 2000);
+        }
+        
+        // Detail modal functions
+        let detailContextMenu = null;
+        let selectedDetailEntry = null;
+        
+        function initializeDetailVirtualScrolling() {
+            if (detailGridContainer) {
+                let scrollTimeout;
+                const debouncedScrollHandler = () => {
+                    if (scrollTimeout) cancelAnimationFrame(scrollTimeout);
+                    scrollTimeout = requestAnimationFrame(handleDetailVirtualScroll);
+                };
+                
+                detailGridContainer.addEventListener('scroll', debouncedScrollHandler, { passive: true });
+            }
+        }
+        
+        function handleDetailVirtualScroll() {
+            if (!detailGridContainer) return;
+            
+            const scrollTop = detailGridContainer.scrollTop;
+            const containerHeight = detailGridContainer.clientHeight;
+            
+            const startIndex = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - RENDER_BUFFER);
+            const endIndex = Math.min(detailCachedVisibleRows.size, Math.ceil((scrollTop + containerHeight) / ROW_HEIGHT) + RENDER_BUFFER);
+            
+            if (startIndex !== detailVisibleStart || endIndex !== detailVisibleEnd) {
+                detailVisibleStart = startIndex;
+                detailVisibleEnd = endIndex;
+                
+                const buffer = detailGridContainer.querySelector('.detail-virtual-scroll-buffer');
+                if (buffer) {
+                    buffer.style.transform = `translateY(${detailVisibleStart * ROW_HEIGHT}px)`;
+                }
+            }
+        }
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            updateStatus('Ready - Click Start DRE Analysis', 0, 0, '0 seconds', 'N/A');
+            titleBar.style.cursor = 'grab';
+            
+            document.querySelector('.button-loading').style.display = 'none';
+            
+            document.addEventListener('contextmenu', (e) => {
+                if (e.target.closest('.grid-row')) {
+                    e.preventDefault();
+                }
+            });
+            
+            // Add click hint to grid
+            const grid = document.getElementById('entriesGrid');
+            if (grid.querySelector('.no-results')) {
+                const hint = document.createElement('div');
+                hint.className = 'click-hint';
+                hint.textContent = '💡 Left-click any row to copy its path';
+                grid.querySelector('.no-results').appendChild(hint);
+            }
+        });
+    </script>
+</body>
+</html>
