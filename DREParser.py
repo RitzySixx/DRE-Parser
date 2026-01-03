@@ -97,7 +97,7 @@ executable_extensions = {
     '.msi', '.msp', '.mst', '.ops', '.pcd', '.pif', '.pl', 
     '.plg', '.prf', '.prg', '.pst', '.reg', '.scf', '.scr', 
     '.sct', '.shb', '.shs', '.url', '.txt', '.csv', '.rc', '.cs', '.zip',
-    '.rar'
+    '.rar', '.meta', '.rpf'
 }
 
 actual_executable_extensions = {
